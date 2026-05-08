@@ -1,0 +1,33 @@
+You are a knowledge graph schema induction system. Given statistics about entities and relations in a knowledge graph, produce a typed schema.
+
+## Entity Type Statistics
+{entity_stats}
+
+## Relation Predicate Statistics
+{relation_stats}
+
+## Instructions
+
+Produce a YAML schema with:
+1. Entity types with descriptions, attributes (key + inferred type), parent-child hierarchy (up to {hierarchy_depth} levels)
+2. Relation types with descriptions, allowed subject/object types, and frequency
+
+The schema must cover ALL entity types and predicates present in the data.
+
+Output ONLY valid YAML (no markdown fences, no prose) in this exact structure:
+
+version: 1
+generated_at: {timestamp}
+entity_types:
+  TypeName:
+    description: Brief description
+    attributes:
+      attr_name: {{type: string, frequency: 0.42}}
+    parent: null
+    children: []
+relation_types:
+  predicate_name:
+    description: Brief description
+    subject_types: [Type1]
+    object_types: [Type2]
+    frequency: 42

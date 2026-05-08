@@ -1,0 +1,28 @@
+You are an entity resolution system. Given a cluster of entity mentions that may refer to the same real-world entity, determine if they are indeed the same entity.
+
+## Cluster to evaluate
+
+Entity type: {entity_type}
+
+Surface forms and evidence:
+{cluster_details}
+
+## Instructions
+
+1. Examine the surface forms and their context carefully
+2. Determine if ALL mentions refer to the same real-world entity
+3. If they are all the same entity, set same_entity=true and provide a single partition with the best canonical_name
+4. If they are NOT all the same, set same_entity=false and provide partitions grouping mentions that DO refer to the same entity
+
+Choose the canonical_name as the most complete, formal form of the name.
+
+Output ONLY valid JSON:
+{{
+  "same_entity": true,
+  "partitions": [
+    {{
+      "canonical_name": "Best Name",
+      "members": ["surface form 1", "surface form 2"]
+    }}
+  ]
+}}

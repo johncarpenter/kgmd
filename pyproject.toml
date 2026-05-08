@@ -1,0 +1,64 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kgmd"
+dynamic = ["version"]
+description = "A CLI that builds a knowledge graph from markdown files and exposes it via MCP"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+keywords = ["knowledge-graph", "markdown", "mcp", "rag", "entity-extraction", "llm", "sqlite"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Database",
+]
+dependencies = [
+    "click>=8.1",
+    "litellm>=1.50",
+    "sqlite-vec>=0.1.6",
+    "fastembed>=0.4",
+    "networkx>=3.2",
+    "pydantic>=2.6",
+    "mcp>=1.0",
+    "pyyaml>=6.0",
+    "rich>=13.7",
+    "platformdirs>=4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-mock>=3.10",
+    "ruff>=0.4",
+]
+
+[project.urls]
+Homepage = "https://github.com/johncarpenter/kgmd"
+Repository = "https://github.com/johncarpenter/kgmd"
+Issues = "https://github.com/johncarpenter/kgmd/issues"
+
+[project.scripts]
+kgmd = "kgmd.cli:main"
+
+[tool.hatch.version]
+path = "kgmd/__init__.py"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
