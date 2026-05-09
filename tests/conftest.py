@@ -12,6 +12,37 @@ from kgmd.db import get_connection, init_db
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
+SQL_INSERT_DOC = (
+    "INSERT INTO documents (path, content_hash, size_bytes, mtime, ingested_at)"
+    " VALUES (?, ?, ?, ?, ?)"
+)
+SQL_INSERT_CHUNK = (
+    "INSERT INTO chunks"
+    " (document_id, chunk_index, content, char_start, char_end, token_count)"
+    " VALUES (?, ?, ?, ?, ?, ?)"
+)
+SQL_INSERT_ENTITY = (
+    "INSERT INTO entities"
+    " (canonical_name, entity_type, attributes, created_at, updated_at)"
+    " VALUES (?, ?, ?, ?, ?)"
+)
+SQL_INSERT_MENTION = (
+    "INSERT INTO entity_mentions"
+    " (entity_id, surface_form, chunk_id, extraction_run_id, confidence)"
+    " VALUES (?, ?, ?, ?, ?)"
+)
+SQL_INSERT_RUN = (
+    "INSERT INTO extraction_runs"
+    " (started_at, model, status, documents_processed)"
+    " VALUES (?, ?, 'completed', 1)"
+)
+SQL_INSERT_RELATION = (
+    "INSERT INTO relations"
+    " (subject_id, predicate, object_id, evidence_chunk_id,"
+    " extraction_run_id, confidence, created_at)"
+    " VALUES (?, ?, ?, ?, ?, ?, ?)"
+)
+
 
 @pytest.fixture
 def tmp_corpus(tmp_path):
@@ -62,30 +93,24 @@ def seeded_db(initialized_corpus):
     now = datetime.now(timezone.utc).isoformat()
 
     # Insert documents
-    conn.execute(
-        "INSERT INTO documents (path, content_hash, size_bytes, mtime, ingested_at) VALUES (?, ?, ?, ?, ?)",
-        ("test.md", "abc123", 100, 1234567890.0, now),
-    )
+    conn.execute(SQL_INSERT_DOC, ("test.md", "abc123", 100, 1234567890.0, now))
     doc_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
     # Insert chunks
     conn.execute(
-        "INSERT INTO chunks (document_id, chunk_index, content, char_start, char_end, token_count) VALUES (?, ?, ?, ?, ?, ?)",
+        SQL_INSERT_CHUNK,
         (doc_id, 0, "Brian Anderson is the CFO of CFO Centre Canada.", 0, 49, 12),
     )
     chunk_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
     conn.execute(
-        "INSERT INTO chunks (document_id, chunk_index, content, char_start, char_end, token_count) VALUES (?, ?, ?, ?, ?, ?)",
+        SQL_INSERT_CHUNK,
         (doc_id, 1, "Sarah Chen works at Acme Corp as a software engineer.", 50, 103, 13),
     )
     chunk_id2 = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
     # Create extraction run
-    conn.execute(
-        "INSERT INTO extraction_runs (started_at, model, status, documents_processed) VALUES (?, ?, 'completed', 1)",
-        (now, "test-model"),
-    )
+    conn.execute(SQL_INSERT_RUN, (now, "test-model"))
     run_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
     # Insert entities
@@ -98,23 +123,20 @@ def seeded_db(initialized_corpus):
     ]
     entity_ids = {}
     for name, etype, attrs in entities:
-        conn.execute(
-            "INSERT INTO entities (canonical_name, entity_type, attributes, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-            (name, etype, attrs, now, now),
-        )
+        conn.execute(SQL_INSERT_ENTITY, (name, etype, attrs, now, now))
         eid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
         entity_ids[name] = eid
 
     # Insert mentions
     for name in ["Brian Anderson", "CFO Centre Canada"]:
         conn.execute(
-            "INSERT INTO entity_mentions (entity_id, surface_form, chunk_id, extraction_run_id, confidence) VALUES (?, ?, ?, ?, ?)",
+            SQL_INSERT_MENTION,
             (entity_ids[name], name, chunk_id, run_id, 0.95),
         )
 
     for name in ["Sarah Chen", "Acme Corp"]:
         conn.execute(
-            "INSERT INTO entity_mentions (entity_id, surface_form, chunk_id, extraction_run_id, confidence) VALUES (?, ?, ?, ?, ?)",
+            SQL_INSERT_MENTION,
             (entity_ids[name], name, chunk_id2, run_id, 0.9),
         )
 
@@ -126,10 +148,7 @@ def seeded_db(initialized_corpus):
         (entity_ids["Acme Corp"], "runs", entity_ids["Digital Transformation"], chunk_id2),
     ]
     for sub, pred, obj, ck in relations:
-        conn.execute(
-            "INSERT INTO relations (subject_id, predicate, object_id, evidence_chunk_id, extraction_run_id, confidence, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (sub, pred, obj, ck, run_id, 0.9, now),
-        )
+        conn.execute(SQL_INSERT_RELATION, (sub, pred, obj, ck, run_id, 0.9, now))
 
     conn.commit()
     yield conn

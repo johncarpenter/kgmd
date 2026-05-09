@@ -118,7 +118,8 @@ def stats(db: str | None, as_json: bool) -> None:
 
         # Entity counts by type
         type_rows = conn.execute(
-            "SELECT entity_type, COUNT(*) as cnt FROM entities GROUP BY entity_type ORDER BY cnt DESC"
+            "SELECT entity_type, COUNT(*) as cnt FROM entities"
+            " GROUP BY entity_type ORDER BY cnt DESC"
         ).fetchall()
 
         # Relation counts by predicate
@@ -651,7 +652,7 @@ def export_cmd(fmt: str, output: str | None, db: str | None) -> None:
 
 
 @main.command()
-@click.option("--hard", is_flag=True, help="Also remove ingested documents and chunks (full reset).")
+@click.option("--hard", is_flag=True, help="Also remove documents and chunks.")
 @click.confirmation_option(prompt="This will delete all graph data. Continue?")
 def reset(hard: bool) -> None:
     """Reset the knowledge graph, keeping config and prompts.

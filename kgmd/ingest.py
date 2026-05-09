@@ -189,7 +189,9 @@ def ingest_documents(conn, corpus_dir: Path, config: dict) -> dict:
         if row:
             doc_id = row["id"]
             conn.execute(
-                "UPDATE documents SET content_hash=?, size_bytes=?, mtime=?, ingested_at=?, last_extracted_hash=NULL WHERE id=?",
+                "UPDATE documents SET content_hash=?, size_bytes=?,"
+                " mtime=?, ingested_at=?,"
+                " last_extracted_hash=NULL WHERE id=?",
                 (content_hash, size_bytes, mtime, now, doc_id),
             )
             # Delete old chunks (cascades to mentions)
@@ -197,7 +199,9 @@ def ingest_documents(conn, corpus_dir: Path, config: dict) -> dict:
             stats["updated"] += 1
         else:
             cur = conn.execute(
-                "INSERT INTO documents (path, content_hash, size_bytes, mtime, ingested_at) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO documents"
+                " (path, content_hash, size_bytes, mtime, ingested_at)"
+                " VALUES (?, ?, ?, ?, ?)",
                 (rel_path, content_hash, size_bytes, mtime, now),
             )
             doc_id = cur.lastrowid
@@ -207,7 +211,10 @@ def ingest_documents(conn, corpus_dir: Path, config: dict) -> dict:
         chunks = chunk_markdown(content, max_chars, overlap_chars, split_on)
         for chunk in chunks:
             conn.execute(
-                "INSERT INTO chunks (document_id, chunk_index, content, char_start, char_end, token_count) VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO chunks"
+                " (document_id, chunk_index, content,"
+                " char_start, char_end, token_count)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     doc_id,
                     chunk.chunk_index,

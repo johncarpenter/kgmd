@@ -38,7 +38,10 @@ def run_resolution(conn, config: dict, corpus_dir: Path | None = None) -> dict:
 
     # Create resolution run
     cur = conn.execute(
-        "INSERT INTO resolution_runs (started_at, embedding_model, llm_model, similarity_threshold, status) VALUES (?, ?, ?, ?, 'running')",
+        "INSERT INTO resolution_runs"
+        " (started_at, embedding_model, llm_model,"
+        " similarity_threshold, status)"
+        " VALUES (?, ?, ?, ?, 'running')",
         (now, emb_model, model, threshold),
     )
     run_id = cur.lastrowid
@@ -192,7 +195,9 @@ def _verify_cluster(
     for m in cluster:
         # Get a snippet of evidence
         chunk = conn.execute(
-            "SELECT content FROM chunks c JOIN entity_mentions em ON em.chunk_id = c.id WHERE em.id = ?",
+            "SELECT content FROM chunks c"
+            " JOIN entity_mentions em ON em.chunk_id = c.id"
+            " WHERE em.id = ?",
             (m["id"],),
         ).fetchone()
         snippet = chunk["content"][:150] if chunk else ""

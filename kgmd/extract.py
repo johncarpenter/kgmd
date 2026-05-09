@@ -30,7 +30,8 @@ def _load_prompt_template(corpus_dir: Path) -> str:
 def _get_type_vocabulary(conn, top_n: int = 50) -> str:
     """Get the top N most-common entity types."""
     rows = conn.execute(
-        "SELECT entity_type, COUNT(*) as cnt FROM entities GROUP BY entity_type ORDER BY cnt DESC LIMIT ?",
+        "SELECT entity_type, COUNT(*) as cnt FROM entities"
+        " GROUP BY entity_type ORDER BY cnt DESC LIMIT ?",
         (top_n,),
     ).fetchall()
     if not rows:
@@ -41,7 +42,8 @@ def _get_type_vocabulary(conn, top_n: int = 50) -> str:
 def _get_predicate_vocabulary(conn, top_n: int = 50) -> str:
     """Get the top N most-common relation predicates."""
     rows = conn.execute(
-        "SELECT predicate, COUNT(*) as cnt FROM relations GROUP BY predicate ORDER BY cnt DESC LIMIT ?",
+        "SELECT predicate, COUNT(*) as cnt FROM relations"
+        " GROUP BY predicate ORDER BY cnt DESC LIMIT ?",
         (top_n,),
     ).fetchall()
     if not rows:
@@ -107,7 +109,9 @@ def run_extraction(conn, corpus_dir: Path, config: dict, force: bool = False) ->
         docs = conn.execute("SELECT id, path, content_hash FROM documents").fetchall()
     else:
         docs = conn.execute(
-            "SELECT id, path, content_hash FROM documents WHERE last_extracted_hash IS NULL OR last_extracted_hash != content_hash"
+            "SELECT id, path, content_hash FROM documents"
+            " WHERE last_extracted_hash IS NULL"
+            " OR last_extracted_hash != content_hash"
         ).fetchall()
 
     stats = {"documents_processed": 0, "entities_created": 0, "relations_created": 0}
@@ -174,9 +178,11 @@ def run_extraction(conn, corpus_dir: Path, config: dict, force: bool = False) ->
                     for ent in result.entities:
                         entity_id = _upsert_entity(conn, ent, now)
                         conn.execute(
-                            """INSERT INTO entity_mentions
-                               (entity_id, surface_form, chunk_id, char_start, char_end, extraction_run_id, confidence)
-                               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                            "INSERT INTO entity_mentions"
+                            " (entity_id, surface_form, chunk_id,"
+                            " char_start, char_end,"
+                            " extraction_run_id, confidence)"
+                            " VALUES (?, ?, ?, ?, ?, ?, ?)",
                             (
                                 entity_id,
                                 ent.surface_form,
@@ -216,7 +222,9 @@ def run_extraction(conn, corpus_dir: Path, config: dict, force: bool = False) ->
 
     # Finalize run
     conn.execute(
-        "UPDATE extraction_runs SET finished_at = ?, status = 'completed', documents_processed = ? WHERE id = ?",
+        "UPDATE extraction_runs SET finished_at = ?,"
+        " status = 'completed', documents_processed = ?"
+        " WHERE id = ?",
         (datetime.now(timezone.utc).isoformat(), stats["documents_processed"], run_id),
     )
     conn.commit()
@@ -243,7 +251,10 @@ def _upsert_entity(conn, ent, now: str) -> int:
         return row["id"]
     else:
         conn.execute(
-            "INSERT OR IGNORE INTO entities (canonical_name, entity_type, attributes, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO entities"
+            " (canonical_name, entity_type, attributes,"
+            " created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?)",
             (ent.canonical_name, entity_type, json.dumps(ent.attributes), now, now),
         )
         # Fetch the id whether we just inserted or it already existed
@@ -265,9 +276,11 @@ def _insert_relation(conn, rel, chunk_id: int, run_id: int, now: str) -> None:
         return
 
     conn.execute(
-        """INSERT OR IGNORE INTO relations
-           (subject_id, predicate, object_id, evidence_chunk_id, extraction_run_id, confidence, attributes, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        "INSERT OR IGNORE INTO relations"
+        " (subject_id, predicate, object_id,"
+        " evidence_chunk_id, extraction_run_id,"
+        " confidence, attributes, created_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (
             sub["id"],
             rel.predicate,

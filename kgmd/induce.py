@@ -152,7 +152,11 @@ def run_induction(conn, config: dict, corpus_dir: Path | None = None) -> dict:
 
     if missing_types or missing_preds:
         # Re-prompt once with missing types
-        correction = f"Missing entity types: {missing_types}. Missing predicates: {missing_preds}. Please include them."
+        correction = (
+            f"Missing entity types: {missing_types}. "
+            f"Missing predicates: {missing_preds}. "
+            "Please include them."
+        )
         response2 = litellm.completion(
             model=model,
             messages=[

@@ -1,6 +1,5 @@
 """Tests for database schema creation, migrations, and vec extension."""
 
-
 from kgmd.db import init_db
 
 
