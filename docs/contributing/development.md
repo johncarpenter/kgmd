@@ -151,3 +151,20 @@ Tests for any of the above go in the matching `tests/test_<module>.py`, using th
 above.
 
 For the layering rules those destinations follow, read [the architecture page](./architecture.md).
+
+## Spec Kit command definitions are locally patched
+
+`.omp/commands/speckit.*.md` are vendored Spec Kit prompt definitions, installed by `specify` and
+pinned by checksum in `.specify/integrations/omp.manifest.json`. Upstream, the hook sections require
+an agent to invoke any *mandatory* hook automatically, taking the command id from
+`.specify/extensions.yml`. That file is repository-controlled, so upstream's behaviour lets an
+untrusted checkout direct an agent to run an arbitrary command with the agent session's authority.
+
+The committed copies are patched to close that path: a hook command is never invoked without
+explicit user approval, and only an allowlist stored **outside** the checkout may pre-approve one.
+The manifest checksums were regenerated to match the patched files, so the tree is self-consistent.
+
+Re-running `specify init` in this repository will restore the upstream text and drop the patch. If
+you upgrade the scaffold, re-apply it and regenerate the checksums, or the repository ships an
+automatic-execution path again. This project defines no hooks: there is no `.specify/extensions.yml`
+and none is expected.

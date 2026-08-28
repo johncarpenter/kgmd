@@ -3,15 +3,16 @@
   "version": "0.16.4",
   "installed_at": "2026-08-28T11:15:31.274658+00:00",
   "files": {
-    ".omp/commands/speckit.analyze.md": "07e1e9f997bce9e06d3823ecf1ed315bb62381b81e7d6a7aef19c5087c320e70",
-    ".omp/commands/speckit.clarify.md": "ae3efd8a50a67f49ed867eee2c96775928bb4287cc0f195f01a1d53f8a6053b6",
-    ".omp/commands/speckit.constitution.md": "d76a1ecf2ada88befb6f055650db92f5e3d2ac0ed25795de9e3072fc9cb6484f",
-    ".omp/commands/speckit.implement.md": "f97b04c981e76e9d08518e85ecb775520fd51965c7cff8b43997bc3e59d4a37f",
-    ".omp/commands/speckit.converge.md": "e585bc94a3f01cb45eb4f4f6003268a7bc7e1f1685d343c25ad5dc3c484b4816",
-    ".omp/commands/speckit.plan.md": "ff1809d5d72b399ec364414a150c1a20e782677972d11f0bdf8c65c73f898a71",
-    ".omp/commands/speckit.checklist.md": "efca0a3d9dd3e34712a3f9b7bbad5832fca2584ae977b286f56e57d50f53803b",
-    ".omp/commands/speckit.specify.md": "4317296c28a8ccdbe41c7769147a6d85090815c91634250330f107485607b246",
-    ".omp/commands/speckit.tasks.md": "aa4b299eb052a31e0ab22d3b2e85324c8247f65b873a2125b4f32dc316201fec",
-    ".omp/commands/speckit.taskstoissues.md": "1e9a2e305c17195a65e855ef468043e320ef7d1c01181c80fde40925eb5b448c"
-  }
+    ".omp/commands/speckit.analyze.md": "f5304604dfcf40d45ab3b42aaa64f614ad3e0f794ad52d3b0c498a88e528c588",
+    ".omp/commands/speckit.clarify.md": "752ad4a7e1a8dc8a2c7c82018cee1f847a963235f8568ef562905e907e6552e4",
+    ".omp/commands/speckit.constitution.md": "aff2326077a2f2ccb614e14a45efc1874147af992a3aa6a575831c13284beea9",
+    ".omp/commands/speckit.implement.md": "c3bd2dd816a031b2630bbd38b9624ee860f04906e6fdb8a85a4efa6d5a1408d6",
+    ".omp/commands/speckit.converge.md": "3481028bab296803b327666c1c28033fdf71f1b63640b7802bfe369b84b734e6",
+    ".omp/commands/speckit.plan.md": "6f6626a7346ce95c0ebadf87306ab0b24fdf71721d6a529b3e0071ed1f5d1cd2",
+    ".omp/commands/speckit.checklist.md": "33a11dfd51f77ff5de23594a8ee7dd354e26288f1f2c816aa4c79953b26a3556",
+    ".omp/commands/speckit.specify.md": "ba1b313c6016d28855646f24b34645a924a41dca089ace1a9c97a1433642dfe6",
+    ".omp/commands/speckit.tasks.md": "89d110948c95105738e0d58a8405f6facf0578251ef5a894b6483e8948862547",
+    ".omp/commands/speckit.taskstoissues.md": "8bf58881305f4b6bdef7d2b7b6b49a29fbe2528762fe2e3cde8e23e76fbb8d90"
+  },
+  "local_modifications": "Hook sections in .omp/commands/*.md are patched to require explicit user approval before invoking a hook command declared in .specify/extensions.yml. Re-running `specify init` restores upstream content and drops the patch; re-apply it. See docs/contributing/development.md."
 }
