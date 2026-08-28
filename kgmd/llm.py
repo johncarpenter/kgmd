@@ -80,9 +80,7 @@ def call_structured(
             if attempt < max_retries:
                 # Detect truncation vs malformed JSON
                 is_truncated = isinstance(e, json.JSONDecodeError) and (
-                    "Unterminated" in str(e)
-                    or "Expecting" in str(e)
-                    or "end of" in str(e).lower()
+                    "Unterminated" in str(e) or "Expecting" in str(e) or "end of" in str(e).lower()
                 )
                 if is_truncated:
                     correction = (
