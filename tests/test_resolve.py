@@ -68,8 +68,7 @@ def test_resolution_merges_duplicates(initialized_corpus):
     conn.execute(SQL_INSERT_DOC, ("test.md", "abc", 10, 0.0, now))
     conn.execute(SQL_INSERT_CHUNK)
     conn.execute(
-        "INSERT INTO extraction_runs"
-        " (started_at, model, status) VALUES (?, 'test', 'completed')",
+        "INSERT INTO extraction_runs (started_at, model, status) VALUES (?, 'test', 'completed')",
         (now,),
     )
 
@@ -119,8 +118,7 @@ def _seed_run_doc_chunk(conn, now):
     conn.execute(SQL_INSERT_DOC, ("test.md", "abc", 10, 0.0, now))
     conn.execute(SQL_INSERT_CHUNK)
     conn.execute(
-        "INSERT INTO extraction_runs"
-        " (started_at, model, status) VALUES (?, 'test', 'completed')",
+        "INSERT INTO extraction_runs (started_at, model, status) VALUES (?, 'test', 'completed')",
         (now,),
     )
 
@@ -194,7 +192,8 @@ def test_merge_entities_relation_unique_collision(initialized_corpus):
 
     # The surviving relation is preserved.
     survivor_rel = conn.execute(
-        "SELECT COUNT(*) FROM relations WHERE subject_id = 1 AND predicate = 'runs' AND object_id = 3"
+        "SELECT COUNT(*) FROM relations"
+        " WHERE subject_id = 1 AND predicate = 'runs' AND object_id = 3"
     ).fetchone()[0]
     assert survivor_rel == 1
 

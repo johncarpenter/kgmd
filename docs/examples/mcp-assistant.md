@@ -166,5 +166,7 @@ in a session pays the model load; subsequent calls in the same server process do
 - **One corpus per server entry.** The database path is derived from the process working directory,
   which the client fixes at launch. Serving several corpora means several registered entries.
 - **The graph is only as current as the last build.** `get_schema_tool` returns its "no schema"
-  string until an induction has run, and every tool reflects the state of the last `kgmd build`,
-  including entities extracted from notes you have since deleted.
+  string until an induction has run, and every tool reflects the state of the last `kgmd build` —
+  notes written or edited since then are invisible until you build again. That cuts both ways: a
+  note you deleted, renamed, or newly excluded with `.kgmdignore` before that build is gone from the
+  graph, so no tool will answer from it.

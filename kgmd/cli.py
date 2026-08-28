@@ -12,7 +12,8 @@ from rich.table import Table
 
 from kgmd.config import load_config, write_default_config
 from kgmd.db import build_lock, get_connection, init_db
-from kgmd.ingest import ingest_documents
+from kgmd.ignore import IGNORE_FILENAME, write_default_ignore_file
+from kgmd.ingest import dry_run_report, ingest_documents
 from kgmd.query import (
     find_path,
     get_current_schema,
@@ -46,6 +47,38 @@ def get_db_path(db: str | None, corpus_dir: Path | None = None) -> Path:
         return Path(db)
     cd = corpus_dir or find_corpus_dir()
     return cd / ".kgmd" / "graph.db"
+
+
+def _print_removals(ing_stats: dict) -> None:
+    """Report what left the graph, and stay silent when nothing did."""
+    if not ing_stats.get("documents_removed"):
+        return
+    console.print(
+        f"  Removed: {ing_stats['documents_removed']} document(s) no longer in the corpus"
+        f" — {ing_stats['chunks_removed']} chunk(s),"
+        f" {ing_stats['relations_removed']} relation(s),"
+        f" {ing_stats['entities_removed']} entity(ies),"
+        f" {ing_stats['vectors_removed']} vector(s)"
+    )
+
+
+def _print_dry_run(report: dict) -> None:
+    """Render the resolved file set for `kgmd build --dry-run`."""
+    counts = report["counts"]
+    excluded = []
+    if counts["ignored"]:
+        excluded.append(f"{counts['ignored']} excluded by {IGNORE_FILENAME}")
+    if counts["dotpath"]:
+        excluded.append(f"{counts['dotpath']} excluded as a dot-path")
+    suffix = f" ({', '.join(excluded)})" if excluded else ""
+    console.print(f"Resolved {counts['included']} file(s) to index{suffix}.")
+    for path in report["included"]:
+        console.print(f"  {path}")
+    if counts["would_remove"]:
+        console.print(
+            f"Already indexed but no longer in the corpus:"
+            f" {counts['would_remove']} document(s) would be removed."
+        )
 
 
 @click.group()
@@ -90,6 +123,11 @@ def init(path: str) -> None:
     cfg_path = kgmd_dir / "config.yaml"
     write_default_config(cfg_path)
 
+    # Starter ignore file at the corpus root. Every line is a comment, so a fresh
+    # corpus indexes exactly what it would have without it.
+    ignore_path = corpus_dir / IGNORE_FILENAME
+    write_default_ignore_file(ignore_path)
+
     # Initialize database
     db_path = kgmd_dir / "graph.db"
     conn = init_db(db_path)
@@ -98,6 +136,7 @@ def init(path: str) -> None:
     console.print(f"[green]Initialized kgmd corpus at[/green] [bold]{corpus_dir}[/bold]")
     console.print(f"  Database: {db_path}")
     console.print(f"  Config:   {cfg_path}")
+    console.print(f"  Ignore:   {ignore_path}")
 
 
 @main.command()
@@ -198,7 +237,19 @@ def stats(db: str | None, as_json: bool) -> None:
 @click.argument("path", default=".", type=click.Path(exists=True))
 @click.option("--db", type=click.Path(), default=None, help="Path to graph.db")
 @click.option("--config", "config_path", type=click.Path(), default=None, help="Config file path")
-def build(path: str, db: str | None, config_path: str | None) -> None:
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Report the files that would be indexed, then exit without building.",
+)
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON. Requires --dry-run.")
+def build(
+    path: str,
+    db: str | None,
+    config_path: str | None,
+    dry_run: bool,
+    as_json: bool,
+) -> None:
     """Build the knowledge graph: extract, resolve, induce."""
     corpus_dir = Path(path).resolve()
     kgmd_dir = corpus_dir / ".kgmd"
@@ -207,8 +258,27 @@ def build(path: str, db: str | None, config_path: str | None) -> None:
             f"Not a kgmd corpus (no .kgmd/ in {corpus_dir}). Run 'kgmd init' first."
         )
 
+    if as_json and not dry_run:
+        raise click.ClickException("--json requires --dry-run.")
+
     config = load_config(corpus_dir)
     db_path = get_db_path(db, corpus_dir)
+
+    if dry_run:
+        # Read-only, and deliberately ahead of init_db: a dry run must not create
+        # a database for a corpus that has never been built.
+        conn = get_connection(db_path) if db_path.exists() else None
+        try:
+            report = dry_run_report(conn, corpus_dir, config)
+        finally:
+            if conn is not None:
+                conn.close()
+        if as_json:
+            click.echo(json.dumps(report, indent=2))
+        else:
+            _print_dry_run(report)
+        return
+
     conn = init_db(db_path)
 
     with build_lock(kgmd_dir):
@@ -225,6 +295,7 @@ def build(path: str, db: str | None, config_path: str | None) -> None:
             f"  New: {ing_stats['new']}, Updated: {ing_stats['updated']}, "
             f"Skipped: {ing_stats['skipped']}, Chunks: {ing_stats['chunks_created']}"
         )
+        _print_removals(ing_stats)
 
         # Stage 2: Embed chunks
         console.print("[bold]Stage 2: Embedding chunks...[/bold]")
@@ -287,6 +358,7 @@ def extract(path: str, db: str | None, force: bool) -> None:
             f"  New: {ing_stats['new']}, Updated: {ing_stats['updated']}, "
             f"Skipped: {ing_stats['skipped']}"
         )
+        _print_removals(ing_stats)
 
         # Embed chunks
         try:

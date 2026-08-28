@@ -16,10 +16,13 @@ Two sha256 content hashes gate all the expensive work. Both are digests of a fil
 | `documents.content_hash` | ingest, on every change | whether the file is re-read, re-chunked, re-embedded |
 | `documents.last_extracted_hash` | extraction, on success | whether the document is sent to the provider again |
 
-Ingest walks the corpus root for `*.md`, drops any path with a dot-prefixed component (so `.kgmd/`,
-`.git/`, and friends are never ingested), and optionally narrows the walk to `corpus.include`. For
-each file it hashes the bytes and compares against the stored `content_hash`. Equal means the file is
-counted as skipped and nothing else happens to it.
+Ingest resolves the file set before it touches the database: it walks the corpus root for `*.md`,
+narrows the walk to `corpus.include` if that key is set, subtracts the patterns in `.kgmdignore`, and
+drops any path with a dot-prefixed component last of all (so `.kgmd/`, `.git/`, and friends are never
+ingested, and no negated pattern can re-admit them). Every `documents` row whose recorded path is not
+in the resolved set is then removed from the graph. For each file that survives, ingest hashes the
+bytes and compares against the stored `content_hash`. Equal means the file is counted as skipped and
+nothing else happens to it.
 
 Extraction then selects only the documents where `last_extracted_hash` is `NULL` or differs from
 `content_hash`. A document's watermark is written *after* the run, and only if at least one of its
@@ -39,8 +42,9 @@ keys are on, so that chunk delete cascades:
 - `entity_mentions.chunk_id` is `ON DELETE CASCADE` — the document's mentions go with its chunks.
 - `relations.evidence_chunk_id` is `ON DELETE SET NULL` — relation rows **survive** with their
   evidence pointer cleared.
-- `entities` rows are never deleted here. An entity that only ever appeared in text you removed stays
-  in the graph.
+- `entities` rows are never deleted on this path. An entity that only ever appeared in text you
+  edited away stays in the graph. Removing a document is the one case that does sweep entities —
+  see [Change made, work repeated](#change-made-work-repeated).
 
 The practical consequence: repeated edits accumulate relation rows whose evidence is `NULL`, because
 the uniqueness index covers `(subject_id, predicate, object_id, evidence_chunk_id)` and the
@@ -60,10 +64,16 @@ search over a heavily edited corpus is one more reason to prefer a periodic clea
 | Nothing | ingest skips every file, embedding finds nothing new, extraction selects no documents; resolution and induction still run in full |
 | One file edited | that file re-hashed and re-chunked, its chunks re-embedded, its mentions cascade-deleted, the document re-extracted; resolution and induction full |
 | New file added | new `documents` row, chunks created and embedded, document extracted; resolution and induction full |
-| File deleted from disk | **nothing** — ingest only iterates files that exist, so the document, its chunks, and its entities stay in the graph |
-| File renamed | treated as a delete plus an add: the old path's data lingers, the new path is ingested and extracted from scratch |
+| File deleted from disk | its `documents` row is removed, and with it the document's chunks, their mentions, every relation whose evidence chunk belonged to it, its rows in `vec_chunks` and `vec_entity_mentions`, and any entity the removal leaves with no mention and no relation |
+| File newly excluded by `.kgmdignore` | the same removal as a delete: the recorded path is no longer in the resolved file set, and ingest does not distinguish the two |
+| File renamed | a removal plus an add in the same ingest pass: nothing lingers at the old path, and the new path is ingested and extracted from scratch |
 | `chunking.*` changed | nothing for unchanged files; their hashes still match, so old chunk boundaries persist |
 | `llm.model` or a prompt changed | nothing; neither is hashed. Use `kgmd extract --force` |
+
+One guard sits in front of the removal path. If the resolved file set is empty while the graph still
+holds documents, ingest raises before writing anything rather than emptying the graph — a mistyped
+ignore pattern cannot silently cost you a corpus. Emptying a graph on purpose is what
+[Starting over](#starting-over) is for.
 
 Resolution and induction are not incremental at all. `kgmd resolve` re-clusters every embedded
 mention in the database on each run, and `kgmd induce` regenerates the schema from full aggregate
@@ -83,8 +93,10 @@ Reach for it when the *inputs to extraction* changed but the *files* did not:
 - You suspect a bad extraction — a run where many chunks failed, or output that looks truncated.
 
 `--force` does **not** re-chunk and does **not** re-embed: it works from the chunks already in the
-database, and `entities` rows left with no remaining mentions are not swept up. To change chunk
-boundaries or drop orphaned entities you need a full rebuild (see [Starting over](#starting-over)).
+database, and `entities` rows left with no remaining mentions are not swept up. The sweep runs only
+when ingest *removes* a document, and only over the entities that removal itself orphaned — so an
+entity stranded by an earlier `--force` stays in the graph until a full rebuild. To change chunk
+boundaries or drop those orphans you need one (see [Starting over](#starting-over)).
 
 ## Controlling provider spend
 
@@ -101,10 +113,19 @@ Everything else is local: ingest and chunking, all embedding while `embedding.ba
 including `kgmd find` — which embeds your query locally — plus `kgmd export`, `kgmd stats`, and
 `kgmd schema`. Setting `embedding.backend` to `litellm` moves embedding onto the provider too.
 
-Settings that change call volume:
+Extraction spend is per chunk per model call, so the cheapest saving available is not indexing text
+that was never going to earn its keep: archived material, drafts, vendored documentation trees,
+boilerplate templates. That is what `.kgmdignore` is for, and the division of labour between it and
+config is worth fixing in your head — `corpus.include` scopes the directory walk, `.kgmdignore`
+decides what actually gets indexed and therefore what costs money. Its syntax, its precedence, and
+one deliberate divergence from git are in
+[../reference/configuration.md](../reference/configuration.md).
 
-| Setting | Effect on volume |
+What changes call volume:
+
+| Lever | Effect on volume |
 |---|---|
+| `.kgmdignore` | excluded files are never chunked, so they generate no extraction calls at all; the only lever that removes work rather than reshaping it |
 | `chunking.max_chars` | extraction calls scale with chunk count; larger chunks mean fewer, bigger calls |
 | `resolution.llm_verify_clusters` | `false` removes the resolution stage's calls entirely, at the cost of merging on cosine similarity alone |
 | `resolution.similarity_threshold` | a higher threshold produces fewer multi-member clusters, so fewer verification calls |
@@ -118,9 +139,13 @@ Two divergences worth knowing before you tune:
   retry count come from the library defaults, not from `llm.max_tokens`, `llm.timeout_seconds`, or
   `extraction.retry_on_parse_failure`.
 
-Trial-run before committing a large corpus. Either initialize a throwaway corpus in a small
-subdirectory and build that, or set `corpus.include` to one directory so ingest only walks that
-subtree, then read `kgmd stats` and the run log to project cost. Full key reference:
+Trial-run before committing a large corpus. `kgmd build --dry-run` resolves the file set and reports
+it — the included paths, plus counts of what the ignore rules and the dot-path rule left out and how
+many indexed documents would be removed — while taking no build lock, making no provider call, and
+creating no database. Read it before the first paid run and again after every ignore-rule change.
+Beyond that you can initialize a throwaway corpus in a small subdirectory and build that, or set
+`corpus.include` to one directory so ingest only walks that subtree, then read `kgmd stats` and the
+run log to project cost. Full key reference:
 [../reference/configuration.md](../reference/configuration.md).
 
 ## Starting over

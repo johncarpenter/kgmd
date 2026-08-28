@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from kgmd.ignore import is_ignored, load_ignore_rules
+
 
 @dataclass
 class Chunk:
@@ -128,6 +130,19 @@ def _chunk_fixed(text: str, max_chars: int, overlap_chars: int) -> list[Chunk]:
     return chunks
 
 
+@dataclass(frozen=True)
+class FileScan:
+    """What a corpus would index, and why everything else was left out.
+
+    Every path is absolute and each list is sorted. The three lists are disjoint
+    and together they are the candidate set produced by ``corpus.include``.
+    """
+
+    included: list[Path]
+    ignored: list[Path]
+    dotpath: list[Path]
+
+
 def find_markdown_files(root: Path, include: list[str] | None = None) -> list[Path]:
     """Find .md files under root, optionally scoped to include paths.
 
@@ -152,15 +167,185 @@ def _is_dotpath(filepath: Path, root: Path) -> bool:
     return any(part.startswith(".") for part in rel.parts)
 
 
+def scan_corpus_files(root: Path, config: dict) -> FileScan:
+    """Resolve which markdown files the corpus would index.
+
+    Precedence is fixed: ``corpus.include`` scopes the candidates, ``.kgmdignore``
+    subtracts from them and a negation re-adds, and the dot-path rule dominates
+    both — no pattern, negated or otherwise, can re-admit a dotted path.
+
+    This is the single source of the resolved file set: ingest and the dry-run
+    preview both read it, so a preview cannot disagree with what a build does.
+    """
+    include = config.get("corpus", {}).get("include")
+    candidates = find_markdown_files(root, include=include)
+    rules = load_ignore_rules(root)
+
+    included: list[Path] = []
+    ignored: list[Path] = []
+    dotpath: list[Path] = []
+    for fpath in candidates:
+        if _is_dotpath(fpath, root):
+            dotpath.append(fpath)
+        elif is_ignored(fpath.relative_to(root).as_posix(), rules):
+            ignored.append(fpath)
+        else:
+            included.append(fpath)
+
+    return FileScan(included=included, ignored=ignored, dotpath=dotpath)
+
+
+def dry_run_report(conn, corpus_dir: Path, config: dict) -> dict:
+    """The resolved file set behind `kgmd build --dry-run`. Never writes.
+
+    ``conn`` may be None when the corpus has no database yet, in which case
+    nothing can be pending removal. Paths are corpus-relative POSIX strings, the
+    same form stored in ``documents.path``.
+    """
+    scan = scan_corpus_files(corpus_dir, config)
+
+    def rel(paths: list[Path]) -> list[str]:
+        return [p.relative_to(corpus_dir).as_posix() for p in paths]
+
+    included = rel(scan.included)
+    would_remove = 0
+    if conn is not None:
+        indexed = {row[0] for row in conn.execute("SELECT path FROM documents").fetchall()}
+        would_remove = len(indexed - set(included))
+
+    return {
+        "included": included,
+        "ignored": rel(scan.ignored),
+        "dotpath": rel(scan.dotpath),
+        "counts": {
+            "included": len(scan.included),
+            "ignored": len(scan.ignored),
+            "dotpath": len(scan.dotpath),
+            "would_remove": would_remove,
+        },
+    }
+
+
+# SQLite caps host parameters per statement; bind ids in batches rather than
+# creating a temp table, which would be DDL outside kgmd/schema.py.
+_ID_BATCH = 500
+
+REMOVAL_KEYS = (
+    "documents_removed",
+    "chunks_removed",
+    "relations_removed",
+    "entities_removed",
+    "vectors_removed",
+)
+
+
+def prune_missing_documents(conn, kept_rel_paths: set[str]) -> dict:
+    """Remove indexed documents whose path is no longer part of the corpus.
+
+    Newly ignored, deleted, and renamed files are the same state — the recorded
+    path is not in ``kept_rel_paths`` — and are handled identically.
+
+    Cascades do not cover everything. ``entity_mentions`` follows its chunks, but
+    ``relations.evidence_chunk_id`` is ON DELETE SET NULL and the sqlite-vec tables
+    have no foreign keys at all, so relations bound to removed evidence and both
+    vector tables are deleted explicitly. Leaving a vector behind would be worse
+    than untidy: chunk and mention ids are reused, and ``embed_new_chunks`` skips
+    any chunk that already has a vector row, so a future chunk would silently
+    inherit the vector of deleted text.
+    """
+    stats = dict.fromkeys(REMOVAL_KEYS, 0)
+
+    rows = conn.execute("SELECT id, path FROM documents").fetchall()
+    if not rows:
+        return stats
+
+    orphan_ids = [row["id"] for row in rows if row["path"] not in kept_rel_paths]
+    if not orphan_ids:
+        return stats
+
+    if not kept_rel_paths:
+        raise RuntimeError(
+            "Ignore rules exclude every markdown file in the corpus, but the graph still holds "
+            f"{len(rows)} document(s). Refusing to empty it. Check .kgmdignore — "
+            f"run 'kgmd build --dry-run' to see what would be indexed — or use "
+            f"'kgmd reset --hard' if clearing the graph is what you meant."
+        )
+
+    # Collect ids before deleting anything: mention ids are unrecoverable once
+    # their chunks are gone.
+    chunk_ids = _ids_in(conn, "SELECT id FROM chunks WHERE document_id IN", orphan_ids)
+    mention_ids = _ids_in(conn, "SELECT id FROM entity_mentions WHERE chunk_id IN", chunk_ids)
+    entity_ids = _ids_in(
+        conn, "SELECT DISTINCT entity_id FROM entity_mentions WHERE chunk_id IN", chunk_ids
+    )
+
+    stats["vectors_removed"] += _delete_in(
+        conn, "DELETE FROM vec_entity_mentions WHERE mention_id IN", mention_ids
+    )
+    stats["vectors_removed"] += _delete_in(
+        conn, "DELETE FROM vec_chunks WHERE chunk_id IN", chunk_ids
+    )
+    stats["relations_removed"] = _delete_in(
+        conn, "DELETE FROM relations WHERE evidence_chunk_id IN", chunk_ids
+    )
+    stats["chunks_removed"] = _delete_in(
+        conn, "DELETE FROM chunks WHERE document_id IN", orphan_ids
+    )
+    stats["documents_removed"] = _delete_in(conn, "DELETE FROM documents WHERE id IN", orphan_ids)
+    stats["entities_removed"] = _sweep_orphan_entities(conn, entity_ids)
+
+    conn.commit()
+    return stats
+
+
+def _sweep_orphan_entities(conn, entity_ids: list[int]) -> int:
+    """Delete entities that this prune left with no mention and no relation.
+
+    Scoped to the entities whose mentions were just removed, so pre-existing
+    orphans left behind by 'kgmd extract --force' are not collected here.
+    """
+    return _delete_in(
+        conn,
+        "DELETE FROM entities WHERE id NOT IN (SELECT entity_id FROM entity_mentions)"
+        " AND id NOT IN (SELECT subject_id FROM relations)"
+        " AND id NOT IN (SELECT object_id FROM relations)"
+        " AND id IN",
+        entity_ids,
+    )
+
+
+def _batches(ids: list[int]):
+    for start in range(0, len(ids), _ID_BATCH):
+        yield ids[start : start + _ID_BATCH]
+
+
+def _ids_in(conn, select_prefix: str, ids: list[int]) -> list[int]:
+    """Run a `... IN (ids)` select over batched ids and collect the first column."""
+    out: list[int] = []
+    for batch in _batches(ids):
+        placeholders = ",".join("?" * len(batch))
+        rows = conn.execute(f"{select_prefix} ({placeholders})", batch).fetchall()
+        out.extend(row[0] for row in rows)
+    return out
+
+
+def _delete_in(conn, delete_prefix: str, ids: list[int]) -> int:
+    """Run a `... IN (ids)` delete over batched ids and total the affected rows."""
+    removed = 0
+    for batch in _batches(ids):
+        placeholders = ",".join("?" * len(batch))
+        cur = conn.execute(f"{delete_prefix} ({placeholders})", batch)
+        removed += cur.rowcount
+    return removed
+
+
 def ingest_documents(conn, corpus_dir: Path, config: dict) -> dict:
     """Ingest markdown files: hash-check, upsert documents, chunk.
 
     Returns a summary dict with counts.
     """
-    include = config.get("corpus", {}).get("include")
-    md_files = find_markdown_files(corpus_dir, include=include)
-    # Exclude dotfile directories (.kgmd, .claude, .git, etc.)
-    md_files = [f for f in md_files if not _is_dotpath(f, corpus_dir)]
+    scan = scan_corpus_files(corpus_dir, config)
+    md_files = scan.included
 
     chunking = config.get("chunking", {})
     max_chars = chunking.get("max_chars", 4000)
@@ -168,6 +353,9 @@ def ingest_documents(conn, corpus_dir: Path, config: dict) -> dict:
     split_on = chunking.get("split_on", "paragraph")
 
     stats = {"new": 0, "updated": 0, "skipped": 0, "chunks_created": 0}
+    stats.update(
+        prune_missing_documents(conn, {p.relative_to(corpus_dir).as_posix() for p in scan.included})
+    )
     now = datetime.now(timezone.utc).isoformat()
 
     for fpath in md_files:

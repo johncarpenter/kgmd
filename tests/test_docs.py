@@ -409,9 +409,7 @@ def test_global_option_documented():
 
 def test_structured_output_parity():
     documented = {
-        name
-        for name, body in sections(CLI_REF).items()
-        if "**Structured output**:" in body
+        name for name, body in sections(CLI_REF).items() if "**Structured output**:" in body
     }
     actual = structured_output_commands()
     assert documented == actual, (
@@ -449,11 +447,7 @@ def test_inert_keys_marked():
         for line in page_lines(CONFIG_REF)
         if line.startswith("|") and line.count("|") >= 4
     }
-    problems = [
-        key
-        for key in INERT_CONFIG_KEYS
-        if INERT_MARKER not in rows.get(key, "")
-    ]
+    problems = [key for key in INERT_CONFIG_KEYS if INERT_MARKER not in rows.get(key, "")]
     assert not problems, f"inert keys missing the '{INERT_MARKER}' marker: {sorted(problems)}"
 
 
@@ -518,9 +512,7 @@ def test_concept_terms_defined():
 
 def test_quoted_errors_exist_in_source():
     source = package_source_text()
-    symptoms = [
-        line for line in prose_lines(TROUBLESHOOTING) if line.startswith("**Symptom**:")
-    ]
+    symptoms = [line for line in prose_lines(TROUBLESHOOTING) if line.startswith("**Symptom**:")]
     assert symptoms, "troubleshooting page has no **Symptom**: entries"
     problems = []
     for line in symptoms:
@@ -536,9 +528,7 @@ def test_quoted_errors_exist_in_source():
 def test_walkthrough_sections():
     problems = []
     for path in sorted(EXAMPLES.glob("*.md")):
-        headings = [
-            line[3:].strip() for line in prose_lines(path) if line.startswith("## ")
-        ]
+        headings = [line[3:].strip() for line in prose_lines(path) if line.startswith("## ")]
         for section in WALKTHROUGH_SECTIONS:
             if section not in headings:
                 problems.append(f"{rel(path)}: missing '## {section}'")

@@ -289,7 +289,8 @@ def _merge_entities(conn, survivor_id: int, drop_ids: list[int], canonical_name:
     if drop_ids:
         placeholders = ",".join("?" for _ in drop_ids)
         conn.execute(
-            f"DELETE FROM relations WHERE subject_id IN ({placeholders}) OR object_id IN ({placeholders})",
+            f"DELETE FROM relations WHERE subject_id IN ({placeholders})"
+            f" OR object_id IN ({placeholders})",
             list(drop_ids) + list(drop_ids),
         )
 
