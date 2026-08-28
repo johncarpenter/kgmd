@@ -82,13 +82,14 @@ the exact registered tool names, and client configuration are in
 | Troubleshooting | [docs/guides/troubleshooting.md](docs/guides/troubleshooting.md) |
 | Worked examples | [docs/examples/personal-notes.md](docs/examples/personal-notes.md) |
 | Contributing | [docs/contributing/development.md](docs/contributing/development.md) |
+| Release history | [CHANGELOG.md](CHANGELOG.md) |
 
 Index: [docs/README.md](docs/README.md).
 
 ## Development
 
 ```bash
-git clone https://github.com/2lines/kgmd.git
+git clone https://github.com/johncarpenter/kgmd.git
 cd kgmd
 make install   # pip install -e ".[dev]"
 make test      # pytest

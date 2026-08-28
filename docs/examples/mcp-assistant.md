@@ -1,5 +1,5 @@
 # Walkthrough: Ask Questions Through an Assistant
-> Applies to kgmd 0.1.x
+> Applies to kgmd 0.2.x
 
 For anyone who already has a built kgmd corpus and wants to ask about it in natural language instead
 of composing CLI invocations. By the end an MCP-capable assistant will be wired to your graph, you
@@ -14,7 +14,7 @@ last build produced and never writes to the graph.
 
 ## Prerequisites
 
-- kgmd 0.1.0 installed and on `PATH`, and a corpus you have already built with `kgmd build`. The
+- kgmd 0.2.0 installed and on `PATH`, and a corpus you have already built with `kgmd build`. The
   walkthrough in [personal-notes.md](./personal-notes.md) produces one; so does
   [quickstart.md](../quickstart.md).
 - An MCP-capable client that can launch a stdio server with a working directory — Claude Desktop,

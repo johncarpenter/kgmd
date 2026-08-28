@@ -1,5 +1,5 @@
 # Configuration Reference
-> Applies to kgmd 0.1.x
+> Applies to kgmd 0.2.x
 
 For operators tuning a corpus: this page lists every configuration key kgmd reads, where the files
 live, how the two files are merged, and which pipeline stage consumes each setting. After reading it

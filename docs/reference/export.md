@@ -1,5 +1,5 @@
 # Export Reference
-> Applies to kgmd 0.1.x
+> Applies to kgmd 0.2.x
 
 For anyone moving a built graph into another tool: this page describes the three formats
 `kgmd export` can emit, exactly what each one contains, and which downstream tool consumes it. After

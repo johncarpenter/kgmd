@@ -1,5 +1,5 @@
 # Development
-> Applies to kgmd 0.1.x
+> Applies to kgmd 0.2.x
 
 For contributors changing kgmd's code or its documentation. Working through this page from a fresh
 clone gets you an installed development environment, a clean local check run that mirrors the
@@ -125,7 +125,7 @@ The consequence is symmetrical:
 So a capability change and its documentation ship in the same commit. There is no follow-up window
 in which the docs are allowed to be wrong.
 
-The version stamp on line 2 of every page (`> Applies to kgmd 0.1.x`) is checked against
+The version stamp on line 2 of every page (`> Applies to kgmd 0.2.x`) is checked against
 `kgmd/__init__.py`. Bumping `__version__` across a minor boundary turns every page red until the
 stamps are updated — see [the release process](./release.md).
 

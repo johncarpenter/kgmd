@@ -1,5 +1,5 @@
 # Walkthrough: A Searchable Graph Over Your Own Notes
-> Applies to kgmd 0.1.x
+> Applies to kgmd 0.2.x
 
 For anyone with a directory of markdown notes — a Zettelkasten, meeting notes, a research journal —
 who wants to query it instead of grepping it. By the end you will have a graph built from your own
@@ -20,7 +20,7 @@ then answer questions about it from the command line. Three kinds of question ar
 
 ## Prerequisites
 
-- kgmd 0.1.0 installed and on `PATH`. See [install.md](../install.md).
+- kgmd 0.2.0 installed and on `PATH`. See [install.md](../install.md).
 - A provider credential for the LLM stages, exported in the environment before you build. kgmd never
   reads, prompts for, stores, or logs credentials — `litellm` picks the variable up implicitly from
   the model id you configured:

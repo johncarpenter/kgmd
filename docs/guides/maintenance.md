@@ -1,5 +1,5 @@
 # Maintaining a kgmd corpus
-> Applies to kgmd 0.1.x
+> Applies to kgmd 0.2.x
 
 For anyone who already has a built graph and now has to keep it current. This page explains exactly
 what a re-run repeats and what it skips, how to force full reprocessing, which stages spend provider
@@ -150,7 +150,7 @@ run log to project cost. Full key reference:
 
 ## Starting over
 
-There are three levels, and in 0.1.0 only the third one works — see the warning below.
+There are three levels, and in 0.2.0 only the third one works — see the warning below.
 
 | Action | Removes | Preserves |
 |---|---|---|
@@ -161,7 +161,7 @@ There are three levels, and in 0.1.0 only the third one works — see the warnin
 `kgmd reset` prompts for confirmation; `--yes` skips the prompt. It requires the database to exist
 and takes the build lock while it works.
 
-> **Both `reset` forms fail in 0.1.0.** The command issues its `DELETE` statements and then runs
+> **Both `reset` forms fail in 0.2.0.** The command issues its `DELETE` statements and then runs
 > `conn.execute("VACUUM")` on the same connection, which SQLite refuses inside the open transaction
 > the deletes started. The command exits 1 with `Error: cannot VACUUM from within a transaction` and,
 > because the transaction is never committed, changes nothing. Until this is fixed, delete
@@ -274,14 +274,22 @@ cost of re-spending the extraction budget.
 
 ## Upgrading kgmd
 
-There is no migration path in 0.1.0, and this is a limitation rather than a guarantee of stability.
+There is no migration path in 0.2.0, and this is a limitation rather than a guarantee of stability.
 `init_db` reads `PRAGMA user_version`; when it is `0` the full schema is created and the version set
 to `1`, and when it is anything else the function returns the open connection untouched. No code
 inspects the version further and no upgrade steps exist.
 
 Consequences for a version bump:
 
-- Within 0.1.x, an existing `.kgmd/graph.db` opens as-is.
+- Within 0.2.x, an existing `.kgmd/graph.db` opens as-is.
+- **Upgrading from 0.1.x to 0.2.0 changes what a build does, not what the database looks like.** The
+  schema is untouched — `PRAGMA user_version` is still `1` — so an existing graph opens as-is with no
+  migration. But the first build after upgrading reconciles the graph against the corpus: every
+  document whose file has since been deleted, renamed, or newly excluded by `.kgmdignore` is removed,
+  together with its chunks, its mentions, relations whose evidence came from it, its vectors, and any
+  entity it leaves with no mention and no relation. On a corpus with a long edit history that can be
+  a large one-off removal. Run `kgmd build --dry-run` first: it reports how many indexed documents
+  would be removed, without touching anything.
 - If a future release changes the schema, an old database will be opened without being upgraded, and
   the fix will be to delete `.kgmd/graph.db` and rebuild — the same recovery as an embedding-model
   change.

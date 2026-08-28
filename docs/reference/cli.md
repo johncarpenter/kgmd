@@ -1,5 +1,5 @@
 # CLI Reference
-> Applies to kgmd 0.1.x
+> Applies to kgmd 0.2.x
 
 This page is the complete reference for the `kgmd` command-line interface: every command, every
 parameter, every default, and what each command actually touches on disk. Read it when you need the

@@ -1,5 +1,5 @@
 # Concepts
-> Applies to kgmd 0.1.x
+> Applies to kgmd 0.2.x
 
 For anyone about to run, tune, or debug a build. This page defines the six words the rest of the
 documentation uses without explanation — document, chunk, entity, mention, relation, induced schema —

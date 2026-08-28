@@ -1,5 +1,5 @@
 # Quickstart
-> Applies to kgmd 0.1.x
+> Applies to kgmd 0.2.x
 
 For a reader who has kgmd installed and wants a working graph, not a tour. Follow this page in order
 and in about ten minutes you will have a queryable knowledge graph over a directory of markdown

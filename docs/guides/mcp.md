@@ -1,5 +1,5 @@
 # MCP Server
-> Applies to kgmd 0.1.x
+> Applies to kgmd 0.2.x
 
 For anyone who wants an MCP-capable assistant to read a built kgmd graph. By the end of this page you
 will have a client configured against a corpus, you will know the exact name and signature of all
