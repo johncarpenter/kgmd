@@ -1,5 +1,5 @@
 # Architecture
-> Applies to kgmd 0.1.x
+> Applies to kgmd 0.2.x
 
 For contributors who need to know where a change belongs before making it. This page maps every
 module in `kgmd/`, states the one-way dependency rule the package follows, and identifies the single

@@ -1,5 +1,5 @@
 # Install
-> Applies to kgmd 0.1.x
+> Applies to kgmd 0.2.x
 
 For anyone putting kgmd on a machine for the first time. By the end you will have the `kgmd`
 command available, a verified interpreter that can load SQLite extensions, and — if you intend to

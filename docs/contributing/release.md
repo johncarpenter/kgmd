@@ -1,5 +1,5 @@
 # Release
-> Applies to kgmd 0.1.x
+> Applies to kgmd 0.2.x
 
 For maintainers cutting a kgmd release. This page states where the version number lives, the exact
 sequence that publishes to PyPI, what is prohibited, and the manual verification that the automated
@@ -10,7 +10,7 @@ suite structurally cannot perform.
 `__version__` in `kgmd/__init__.py` is the single source of truth:
 
 ```text
-kgmd/__init__.py    __version__ = "0.1.0"
+kgmd/__init__.py    __version__ = "0.2.0"
 ```
 
 `pyproject.toml` declares `dynamic = ["version"]` and points hatchling at that file:
@@ -37,7 +37,7 @@ gate immediately.
    A bump across a minor boundary therefore turns the suite red until every stamp matches. That is
    deliberate: it forces a maintainer to walk the whole documentation set at each release rather than
    shipping pages that silently describe an older version. A patch bump within the same minor
-   (`0.1.0` to `0.1.1`) leaves the stamps valid, because the stamp names the minor series.
+   (`0.2.0` to `0.2.1`) leaves the stamps valid, because the stamp names the minor series.
 
 3. **Run the full local check sequence** from [the development page](./development.md):
 

@@ -1,5 +1,5 @@
 # Troubleshooting
-> Applies to kgmd 0.1.x
+> Applies to kgmd 0.2.x
 
 For anyone whose build, query, or MCP server just failed. Each entry below quotes the literal text
 kgmd emits, explains why it is emitted, and gives the fix. Errors are rendered as a single
@@ -244,7 +244,7 @@ softer: an unknown name gives an empty result rather than an error.
 
 **Symptom**: `conn.execute("VACUUM")`
 
-**Cause**: In 0.1.0 both `kgmd reset` and `kgmd reset --hard` issue their `DELETE` statements and then
+**Cause**: In 0.2.0 both `kgmd reset` and `kgmd reset --hard` issue their `DELETE` statements and then
 run `VACUUM` on the same connection. SQLite refuses to vacuum inside the transaction those deletes
 opened, so the command exits 1 with `Error: cannot VACUUM from within a transaction`. Because the
 transaction is never committed, nothing is deleted — the reset is a no-op, not a partial wipe.

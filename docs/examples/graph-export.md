@@ -1,5 +1,5 @@
 # Walkthrough: Load the Graph Into Another Tool
-> Applies to kgmd 0.1.x
+> Applies to kgmd 0.2.x
 
 For anyone who wants the graph outside kgmd — laid out visually in Gephi or yEd, queried with Cypher
 in Neo4j, or consumed as linked data. By the end you will have exported the same graph in two
@@ -14,7 +14,7 @@ nothing else in the database is exported.
 
 ## Prerequisites
 
-- kgmd 0.1.0 installed, and a corpus already built with `kgmd build` so that entities and relations
+- kgmd 0.2.0 installed, and a corpus already built with `kgmd build` so that entities and relations
   exist. `kgmd stats` shows non-zero counts for both. Exporting an empty graph is not an error — it
   produces a well-formed but nodeless document (and, for `cypher`, an empty file).
 - The external tool you intend to load into: Gephi or yEd for GraphML, Neo4j (`cypher-shell` or the

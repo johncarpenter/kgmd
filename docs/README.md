@@ -1,5 +1,5 @@
 # kgmd Documentation
-> Applies to kgmd 0.1.x
+> Applies to kgmd 0.2.x
 
 Everything needed to install, use, operate, and contribute to kgmd. Start with
 [Install](./install.md) and the [Quickstart](./quickstart.md); come back here to look things up.
