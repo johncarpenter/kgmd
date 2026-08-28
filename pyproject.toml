@@ -24,7 +24,9 @@ classifiers = [
 ]
 dependencies = [
     "click>=8.1",
-    "litellm>=1.50",
+    # 1.83+ does `from typing import NotRequired`, which is 3.11+, while still
+    # declaring requires-python >=3.10. Capped until upstream fixes that.
+    "litellm>=1.50,<1.83",
     "sqlite-vec>=0.1.6",
     "fastembed>=0.4",
     "networkx>=3.2",

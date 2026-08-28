@@ -9,3 +9,9 @@ build/
 *.db-shm
 *.db-wal
 .kgmd/
+.DS_Store
+.pytest_cache/
+.ruff_cache/
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,18 @@
+{
+  "integration": "omp",
+  "version": "0.16.4",
+  "installed_at": "2026-08-28T11:15:31.274658+00:00",
+  "files": {
+    ".omp/commands/speckit.analyze.md": "f5304604dfcf40d45ab3b42aaa64f614ad3e0f794ad52d3b0c498a88e528c588",
+    ".omp/commands/speckit.clarify.md": "752ad4a7e1a8dc8a2c7c82018cee1f847a963235f8568ef562905e907e6552e4",
+    ".omp/commands/speckit.constitution.md": "aff2326077a2f2ccb614e14a45efc1874147af992a3aa6a575831c13284beea9",
+    ".omp/commands/speckit.implement.md": "c3bd2dd816a031b2630bbd38b9624ee860f04906e6fdb8a85a4efa6d5a1408d6",
+    ".omp/commands/speckit.converge.md": "3481028bab296803b327666c1c28033fdf71f1b63640b7802bfe369b84b734e6",
+    ".omp/commands/speckit.plan.md": "6f6626a7346ce95c0ebadf87306ab0b24fdf71721d6a529b3e0071ed1f5d1cd2",
+    ".omp/commands/speckit.checklist.md": "33a11dfd51f77ff5de23594a8ee7dd354e26288f1f2c816aa4c79953b26a3556",
+    ".omp/commands/speckit.specify.md": "ba1b313c6016d28855646f24b34645a924a41dca089ace1a9c97a1433642dfe6",
+    ".omp/commands/speckit.tasks.md": "89d110948c95105738e0d58a8405f6facf0578251ef5a894b6483e8948862547",
+    ".omp/commands/speckit.taskstoissues.md": "8bf58881305f4b6bdef7d2b7b6b49a29fbe2528762fe2e3cde8e23e76fbb8d90"
+  },
+  "local_modifications": "Hook sections in .omp/commands/*.md are patched to require explicit user approval before invoking a hook command declared in .specify/extensions.yml. Re-running `specify init` restores upstream content and drops the patch; re-apply it. See docs/contributing/development.md."
+}
