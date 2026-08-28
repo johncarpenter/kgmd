@@ -40,7 +40,8 @@ then answer questions about it from the command line. Three kinds of question ar
 
 Use your own notes directory. Any layout works: kgmd walks the tree, takes every `*.md`, and always
 skips path components beginning with a dot (so `.kgmd/`, `.git/`, and `.claude/` are never
-ingested).
+ingested). A `.kgmdignore` file at the root of the notes directory subtracts further paths from
+that walk; step 2 covers it.
 
 If you want a corpus that behaves the same on someone else's machine, use the seven fixture notes in
 a git checkout — they are small, densely cross-referential, and deliberately inconsistent about
@@ -71,8 +72,10 @@ kgmd init
 
 `kgmd init` creates `.kgmd/` next to your notes containing `config.yaml` (the full default
 configuration, written out key by key), an empty `graph.db`, and empty `logs/` and `prompts/`
-directories. It prints the corpus, database, and config paths. Run again in an initialized directory
-and it prints the existing config instead of overwriting anything.
+directories. It also writes a starter `.kgmdignore` — beside the notes, not inside `.kgmd/` — with
+every line commented out, so a fresh corpus indexes exactly what it would have without the file. It
+prints the corpus, database, and config paths. Run again in an initialized directory and it prints
+the existing config instead of overwriting anything, and leaves an existing `.kgmdignore` untouched.
 
 ### 2. Scope and chunk the corpus (optional)
 
@@ -101,6 +104,35 @@ chunking:
 
 Every key, its default, and its effect is in [configuration.md](../reference/configuration.md).
 
+`corpus.include` only decides which part of the tree is a candidate. To subtract from that
+candidate set, write a `.kgmdignore` at the corpus root — gitignore-style patterns, one per line,
+`#` for comments:
+
+```text
+archive/
+drafts/
+!archive/2024-decisions.md
+```
+
+A personal corpus is where this pays for itself: an `archive/` you never query and a `drafts/` full
+of half-finished sentences cost one LLM call per chunk on every build that first touches them.
+Patterns are read in order and the last match wins, so the negation above re-admits that one
+archived note — which git will not do for a file whose parent directory is excluded. The dot-path
+rule is applied last and dominates, so no pattern re-admits `.kgmd/` or `.git/`. Syntax, precedence,
+and the constructs that are not supported are in
+[configuration.md](../reference/configuration.md).
+
+Check the result before paying for a build:
+
+```bash
+kgmd build --dry-run
+```
+
+It prints the files that would be indexed, how many the ignore rules and the dot-path rule dropped,
+and how many already-indexed documents would be removed. It takes no build lock, makes no provider
+call, and creates no database. `--json` gives the same report machine-readably and requires
+`--dry-run`.
+
 ### 3. Build the graph
 
 ```bash
@@ -120,6 +152,15 @@ Re-run `kgmd build` after editing notes. Ingest compares a sha256 of the file co
 `documents.content_hash`, and extraction re-runs only where `documents.last_extracted_hash` differs
 from the current content hash, so unchanged files cost nothing. File mtime is stored but never used
 to decide what to skip. `kgmd extract --force` re-extracts everything regardless.
+
+Removal happens in the same pass, before the insert and update loop. Ingest drops every indexed
+document whose path is no longer in the resolved file set — deleted, renamed, and newly excluded by
+`.kgmdignore` are one state, not three — together with its chunks, its mentions, the relations whose
+evidence came from those chunks, the vectors for both, and any entity the removal leaves with no
+mention and no relation. `kgmd build` and `kgmd extract` both do it and both print a `Removed:` line
+in the ingest summary when something was removed, and nothing extra when nothing was. If the
+resolved set is empty while the graph still holds documents, ingest refuses before writing anything
+rather than emptying the graph behind a pattern you did not mean.
 
 ### 4. Query the graph
 
@@ -268,11 +309,12 @@ canonical entity names — match the name `kgmd entities` shows, or find it firs
 - **Runs are not reproducible.** `llm.temperature` defaults to `0.0`, but identical input can still
   produce a different entity or relation count on a second build. Treat any count as a description
   of one run.
-- **Deleted notes are not removed from the graph.** Ingest only inserts and updates rows for files
-  it finds; there is no pass that deletes documents whose file has disappeared, so entities
-  extracted from a note you deleted survive in the graph. To drop them, clear the graph and rebuild
-  — `kgmd reset --hard` (which also clears documents and chunks) or delete `.kgmd/graph.db`
-  outright. See [maintenance.md](../guides/maintenance.md).
+- **Entities stranded by an earlier forced extraction are not swept.** Removing a note collects the
+  entities *that removal* leaves with no mention and no relation, and only those. An entity left
+  behind by an earlier `kgmd extract --force` is outside that scope: it stays in the graph and keeps
+  appearing in `kgmd entities`. Clearing the graph with `kgmd reset --hard` and rebuilding is the
+  way to drop it — see [maintenance.md](../guides/maintenance.md) for what reset does and does not
+  touch.
 - **Resolution only merges within one entity type.** Mentions clustered as `Person` never merge with
   mentions typed `Organization`, so a mistyped mention stays a separate entity. Raising
   `resolution.similarity_threshold` merges less; lowering it merges more, including things that are

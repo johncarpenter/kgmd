@@ -57,6 +57,10 @@ Full walkthrough: [docs/quickstart.md](docs/quickstart.md).
 All state lives in `.kgmd/graph.db`, a single SQLite file. Re-running `kgmd build` is incremental —
 unchanged files are skipped. See [docs/concepts.md](docs/concepts.md).
 
+A `.kgmdignore` file at the corpus root keeps material out of the graph, and therefore out of the
+paid extraction path; `kgmd build --dry-run` shows what would be indexed before you spend anything.
+Syntax and precedence: [docs/reference/configuration.md](docs/reference/configuration.md).
+
 ## MCP server
 
 `kgmd mcp` launches an MCP server over stdio exposing seven read-only tools over the graph. Setup,

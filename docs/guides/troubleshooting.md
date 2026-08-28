@@ -133,6 +133,30 @@ cleanup is only needed for an empty lock file. Confirm no build is actually runn
 rm -f .kgmd/build.lock
 ```
 
+### A build refuses to run after you edited the ignore file
+
+**Symptom**: `Ignore rules exclude every markdown file in the corpus`
+
+**Cause**: Ingest prunes unconditionally — every `documents` row whose path is no longer in the
+resolved file set is removed, which is how a deleted, renamed, or newly ignored file leaves the
+graph. An over-broad `.kgmdignore` pattern, usually a bare `*`, resolves the file set to nothing, and
+the prune would then delete the entire graph. So an empty file set against a non-empty `documents`
+table is treated as a mistake rather than an instruction: the build raises before any write, and
+nothing was removed.
+
+**Fix**: Look at what the rules actually resolve to, correct the pattern, and re-run:
+
+```bash
+kgmd build --dry-run
+```
+
+A dry run is a read and the guard only protects writes, so in this state it exits 0 and simply
+reports zero included files — that zero is the confirmation, not a second failure. The last matching
+rule wins, so a `!` line placed after the offending pattern is often the shortest correction; the
+syntax is in [../reference/configuration.md](../reference/configuration.md). If emptying the graph
+really was the intent, `kgmd reset --hard` is the explicit way to ask for it — subject to the reset
+bug described below.
+
 ### The provider returns something that is not the expected JSON
 
 **Symptom**: `LLM call failed after`
@@ -159,15 +183,43 @@ extraction stage applies its own lower internal default — see
 **Cause**: A build reaches "Build complete." even when every extraction call failed, because failures
 are per-chunk warnings rather than fatal errors. Induction also returns quietly with zero types when
 there are no entities, so `kgmd schema` reports that no schema has been induced yet. The other
-possibility is that nothing was ingested at all: ingest only walks `*.md` files, skips every path
-with a dot-prefixed component, and honours `corpus.include` if set.
+possibility is that nothing was ingested at all: ingest only walks `*.md` files, subtracts everything
+matched by `.kgmdignore`, skips every path with a dot-prefixed component, and honours
+`corpus.include` if set.
 
 **Fix**: Read the stage lines the build printed. If stage 1 reported zero new or updated documents,
-the problem is ingest — check the file extensions, check that the notes are not inside a
-dot-prefixed directory, and check `corpus.include`. If documents and chunks exist but entities do
-not, the problem is extraction: look for `Extraction failed:` on stderr and `[FAIL]` lines in
-`.kgmd/logs/build.log`, then follow the credential and JSON entries above. `kgmd stats` prints
-document, chunk, entity, and relation counts, which isolates the stage that produced nothing.
+the problem is ingest — check the file extensions, check `.kgmdignore`, check that the notes are not
+inside a dot-prefixed directory, and check `corpus.include`. If documents and chunks exist but
+entities do not, the problem is extraction: look for `Extraction failed:` on stderr and `[FAIL]`
+lines in `.kgmd/logs/build.log`, then follow the credential and JSON entries above. `kgmd stats`
+prints document, chunk, entity, and relation counts, which isolates the stage that produced nothing.
+
+### A file you can see in the corpus is never indexed
+
+**Symptom**: `excluded as a dot-path`
+
+**Cause**: Three filters stand between a `*.md` file and the graph, in a fixed order.
+`corpus.include`, if set, scopes the candidate set. `.kgmdignore` then subtracts, and `!` lines
+re-add — the last matching rule wins, so a broad pattern further down the file overrides an earlier
+exception. The dot-path rule is applied last and dominates: any path with a component starting with
+`.` is dropped, and no pattern, negated or not, can re-admit it. The usual surprises are in the
+patterns themselves — `*` never crosses a `/`, and a pattern with no `/` in it at all matches at any
+depth, so `drafts` excludes `projects/drafts/` as well as `drafts/`.
+
+**Fix**: Ask kgmd what it resolved rather than re-reading the patterns:
+
+```bash
+kgmd build --dry-run
+```
+
+The report lists every included path and counts what was dropped by `.kgmdignore` separately from
+what was dropped by the dot-path rule, which tells you which of the two to edit; `--json` gives the
+same data in a scriptable shape. Pattern syntax and precedence are in
+[../reference/configuration.md](../reference/configuration.md), the flags in
+[../reference/cli.md](../reference/cli.md). A dot-path exclusion cannot be worked around, so a file
+under a dot-prefixed directory has to move. If the file was in the graph until recently, the
+`Removed:` line a build prints accounts for it — ignoring, deleting, and renaming a file are one
+state as far as ingest is concerned.
 
 ### A query cannot find an entity you know is in the notes
 

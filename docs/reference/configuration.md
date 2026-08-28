@@ -75,7 +75,7 @@ mapping and the second is the key inside it.
 
 | Key | Default | Accepted values | Effect |
 |---|---|---|---|
-| `corpus.include` | unset (`null`) | list of paths relative to the corpus root, each a directory or an `.md` file | Restricts ingestion to those paths. Unset means every `.md` file under the corpus root. Paths whose components begin with a dot are always skipped, so `.kgmd/` never ingests itself. |
+| `corpus.include` | unset (`null`) | list of paths relative to the corpus root, each a directory or an `.md` file | Restricts ingestion to those paths. Entries are literal paths, not globs: `notes/*.md` matches nothing and fails silently. Unset means every `.md` file under the corpus root. Paths whose components begin with a dot are always skipped, so `.kgmd/` never ingests itself. This key scopes the directory walk; [`.kgmdignore`](#the-kgmdignore-file) subtracts from whatever it selects. |
 | `embedding.backend` | `fastembed` | `fastembed`, `litellm` | Selects the embedder. `fastembed` runs the model locally and needs no credential; `litellm` routes embedding calls to a hosted provider. Any other value falls back to `fastembed`. |
 | `embedding.model` | `BAAI/bge-small-en-v1.5` | a model id the chosen backend understands | Model used to embed chunks and entity mentions. The id is recorded in the database at first build and is fixed for the life of the corpus; changing it later aborts the build. See the [maintenance guide](../guides/maintenance.md). |
 | `llm.model` | `openrouter/anthropic/claude-sonnet-4-5` | any litellm-routable model id | Model used for extraction, resolution cluster verification, and schema induction. |
@@ -94,6 +94,91 @@ mapping and the second is the key inside it.
 | `resolution.max_cluster_size` | `10` | int >= 2 | Clusters larger than this are recursively re-clustered with the threshold raised by `0.05` each round, which splits loose groups instead of collapsing them. |
 | `induction.include_attribute_summary` | `true` | bool | **Accepted but currently has no effect.** No module reads the key; what the induced schema summarizes is decided entirely by the induction prompt. |
 | `induction.hierarchy_depth` | `3` | int >= 1 | Interpolated into the induction prompt as the maximum depth of the entity type hierarchy the model may produce. |
+
+## The `.kgmdignore` file
+
+Exclusions are not a config key. They live in a `.kgmdignore` file at the **corpus root** — beside
+your markdown, not inside `.kgmd/` — so the file can sit in version control with the notes it
+describes. `kgmd init` writes a starter copy whose every line is a comment, which is why a fresh
+corpus indexes exactly what it would have without one.
+
+This matters for cost, not tidiness. Every indexed file is chunked and each chunk is one model call,
+so a vendored documentation tree or a folder of boilerplate templates is a repeated charge that buys
+nothing and fills entity resolution with junk mentions.
+
+```text
+# skip archived notes
+archive/
+drafts/
+
+# skip generated or boilerplate files
+**/CHANGELOG.md
+*-template.md
+
+# but keep this one
+!archive/2024-decisions.md
+```
+
+A missing file means no exclusions, and behaves exactly as kgmd did before the file existed. A file
+that is present but unreadable or not UTF-8 is an error rather than a silent skip, because treating
+it as absent would index everything you meant to exclude. Only the corpus-root file is read; a
+`.kgmdignore` in a subdirectory is ignored. The file is re-read on every run, so editing it takes
+effect on the next `kgmd build` with no invalidation step.
+
+### Syntax
+
+Patterns match the path relative to the corpus root, always with `/` separators, and matching is
+case-sensitive regardless of what the filesystem does.
+
+| Construct | Meaning |
+|---|---|
+| `# comment` | ignored, as are blank lines and surrounding whitespace |
+| `*` | any run of characters, never crossing `/` |
+| `?` | exactly one character, never `/` |
+| `**` | any number of path segments; `a/**/b` also matches `a/b` |
+| trailing `/` | directory-only: that directory and everything beneath it |
+| leading `/` | anchored at the corpus root |
+| any interior `/` | anchored at the corpus root |
+| no `/` anywhere | matches at any depth |
+| leading `!` | negation — re-includes a path an earlier rule excluded |
+
+A pattern without a trailing `/` matches a file with that path *and* anything beneath a directory
+with that path, so `archive` and `archive/` differ only in whether a file literally named `archive`
+matches.
+
+Character classes (`[a-z]`) and backslash escapes are **not** supported. A pattern using them is
+matched literally, so it excludes nothing rather than excluding too much.
+
+### Precedence
+
+Fixed, and not configurable:
+
+1. `corpus.include` scopes the candidate set.
+2. `.kgmdignore` rules are evaluated in file order and **the last matching rule wins**.
+3. The dot-path rule is applied last and dominates.
+
+Each candidate file is tested against every rule, both on its own path and on each of its ancestor
+directories — which is what lets a directory rule cover a whole subtree. A path with any
+dot-prefixed component (`.kgmd/`, `.git/`, `.claude/`) is excluded after all rules have been
+evaluated, and no pattern can re-admit it: `!.kgmd/notes.md` has no effect.
+
+### One difference from `.gitignore`
+
+git cannot re-include a file whose parent directory is excluded. `.kgmdignore` can. In the example
+above, `archive/` excludes the directory and `!archive/2024-decisions.md` still brings that one file
+back, because rules are evaluated per file rather than by skipping directories outright. If you are
+carrying patterns over from a `.gitignore`, this is the one place the two disagree.
+
+### Seeing what a rule does
+
+`kgmd build --dry-run` prints the resolved file set and the counts excluded by `.kgmdignore` and by
+the dot-path rule, without writing anything or calling a model. Use it before a build rather than
+inferring rules from a bill. See the [CLI reference](./cli.md).
+
+A file that becomes excluded is also **removed** from an existing graph on the next
+`kgmd build` or `kgmd extract`, along with everything derived from it. As a guard, ignore rules that
+resolve to an empty file set abort the build instead of emptying the graph. Both behaviours are
+described in the [maintenance guide](../guides/maintenance.md).
 
 ## Full example
 

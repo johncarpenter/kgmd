@@ -54,12 +54,17 @@ Initialize a new kgmd corpus.
 | `--help` | flag | off | Show usage and exit. |
 
 Creates `.kgmd/` inside the target directory containing `logs/`, `prompts/`, a `config.yaml`
-written from the built-in defaults, and an initialized `graph.db`. It then prints the resolved
-corpus directory, database path, and config path.
+written from the built-in defaults, and an initialized `graph.db`. It also writes a starter
+`.kgmdignore` at the target directory itself — beside your markdown, not inside `.kgmd/` — whose
+every line is a comment, so it documents the syntax without excluding anything. An existing
+`.kgmdignore` is never overwritten. It then prints the resolved corpus directory, database path,
+config path, and ignore-file path.
 
 If `.kgmd/` already exists the command is a no-op: it prints `Already initialized at <path>`,
-echoes the existing `config.yaml` if there is one, and changes nothing. Re-running `kgmd init` is
-therefore safe and is a quick way to view the corpus config.
+echoes the existing `config.yaml` if there is one, and changes nothing — including leaving a missing
+`.kgmdignore` missing. Re-running `kgmd init` is therefore safe and is a quick way to view the
+corpus config. To add an ignore file to an existing corpus, write one by hand; see
+[./configuration.md](./configuration.md).
 
 ```bash
 cd ~/notes
@@ -118,6 +123,8 @@ Build the knowledge graph: extract, resolve, induce.
 | `PATH` | argument | `.` | Corpus directory; must exist. |
 | `--db` | path | `<PATH>/.kgmd/graph.db` | Alternate database path. |
 | `--config` | path | — | **Accepted but ignored.** See the warning below. |
+| `--dry-run` | flag | off | Report the files that would be indexed, then exit without building. |
+| `--json` | flag | off | Output as JSON. Requires `--dry-run`. |
 | `--help` | flag | off | Show usage and exit. |
 
 > `--config` is parsed and then discarded: `build` always loads the corpus directory's own
@@ -131,7 +138,8 @@ directory, then takes the exclusive build lock at `.kgmd/build.lock` and runs si
 a heading and a one-line summary for each:
 
 1. **Ingesting documents** — scan markdown, chunk it, report new / updated / skipped / chunks
-   created.
+   created, plus a `Removed:` line when documents that are no longer in the corpus were dropped from
+   the graph.
 2. **Embedding chunks** — verify the corpus embedding model, then embed chunks that have no vector.
 3. **Extracting entities and relations** — report documents processed, entities created, relations
    created.
@@ -145,6 +153,31 @@ second `kgmd build` over an unmodified corpus is cheap. Stages 3, 5, and 6 are t
 `extract`, `resolve`, and `induce` exist as separate commands so you can re-run a single stage
 after a partial failure instead of repeating the whole pipeline — for example when extraction
 succeeded but induction hit a provider timeout.
+
+`--dry-run` answers "what would this cost" before it costs anything. It resolves the file set —
+`corpus.include` scoping, then `.kgmdignore`, then the dot-path rule — prints the paths that would be
+indexed with counts of what each stage excluded, and exits. It takes no build lock, makes no provider
+call, writes nothing, and does not even create `graph.db` for a corpus that has never been built. It
+also reports how many already-indexed documents would be **removed** because their path is no longer
+in the corpus. This is the way to check `.kgmdignore` patterns; see
+[./configuration.md](./configuration.md) for the syntax.
+
+`--json` prints that same report as a single JSON object and nothing else. It requires `--dry-run`
+and fails with `--json requires --dry-run.` on its own, because a `--json` that silently implied
+`--dry-run` would mean `kgmd build --json` quietly not building.
+
+**Structured output**: with `--dry-run --json`, one object with `included`, `ignored`, and `dotpath`
+arrays of corpus-relative paths, and a `counts` object holding `included`, `ignored`, `dotpath`, and
+`would_remove`. Paths are sorted and always relative to the corpus root, matching the form stored in
+`documents.path`.
+
+```bash
+kgmd build --dry-run
+```
+
+```bash
+kgmd build --dry-run --json
+```
 
 ```bash
 kgmd build
@@ -169,7 +202,9 @@ Extract entities and relations from documents.
 
 Stage 3 of `build`, plus the ingest and embed steps it depends on. Under the build lock it ingests
 documents, embeds new chunks, extracts, then embeds new mentions, and prints `Extraction complete.`
-It does **not** resolve duplicates or induce a schema.
+It does **not** resolve duplicates or induce a schema. Because it ingests, it also drops documents
+that are no longer part of the corpus — deleted, renamed, or newly excluded by `.kgmdignore` —
+exactly as `build` does.
 
 By default a document is re-extracted only when its content hash differs from the hash recorded at
 its last extraction, so unchanged files cost nothing. `--force` ignores that check and re-extracts
