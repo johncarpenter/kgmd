@@ -117,8 +117,13 @@ Build the knowledge graph: extract, resolve, induce.
 |---|---|---|---|
 | `PATH` | argument | `.` | Corpus directory; must exist. |
 | `--db` | path | `<PATH>/.kgmd/graph.db` | Alternate database path. |
-| `--config` | path | corpus config | Config file path. |
+| `--config` | path | — | **Accepted but ignored.** See the warning below. |
 | `--help` | flag | off | Show usage and exit. |
+
+> `--config` is parsed and then discarded: `build` always loads the corpus directory's own
+> `.kgmd/config.yaml`. Passing a different file has no effect, and no warning is printed. To change
+> build settings, edit the corpus config. See
+> [the configuration reference](./configuration.md).
 
 This is the whole pipeline and the command you normally run. It fails with
 `Not a kgmd corpus (no .kgmd/ in <path>). Run 'kgmd init' first.` if `PATH` has no `.kgmd/`
