@@ -240,12 +240,17 @@ def _most_frequent_surface(conn, entity_ids: list[int]) -> str:
 
 def _merge_entities(conn, survivor_id: int, drop_ids: list[int], canonical_name: str) -> None:
     """Merge dropped entities into the survivor."""
+    # The `mentions` list is fetched once at the start of run_resolution; later
+    # clusters in the same run may name a survivor_id that an earlier cluster
+    # already deleted. Skip silently in that case — the entity was already
+    # resolved into another survivor.
+    survivor_row = conn.execute(
+        "SELECT attributes FROM entities WHERE id = ?", (survivor_id,)
+    ).fetchone()
+    if survivor_row is None:
+        return
     # Merge attributes before deleting drops
-    survivor_attrs = json.loads(
-        conn.execute("SELECT attributes FROM entities WHERE id = ?", (survivor_id,)).fetchone()[
-            "attributes"
-        ]
-    )
+    survivor_attrs = json.loads(survivor_row["attributes"])
     for did in drop_ids:
         row = conn.execute("SELECT attributes FROM entities WHERE id = ?", (did,)).fetchone()
         if row:
@@ -264,18 +269,31 @@ def _merge_entities(conn, survivor_id: int, drop_ids: list[int], canonical_name:
             (survivor_id, did),
         )
 
-    # Re-point relations from dropped entities to survivor
+    # Re-point relations from dropped entities to survivor.
+    # Use OR IGNORE: the UNIQUE constraint on
+    # (subject_id, predicate, object_id, evidence_chunk_id) can fire during
+    # this UPDATE if a survivor relation already exists with the target tuple.
+    # OR IGNORE leaves those rows alone; orphan cleanup happens below.
     for did in drop_ids:
         conn.execute(
-            "UPDATE relations SET subject_id = ? WHERE subject_id = ?",
+            "UPDATE OR IGNORE relations SET subject_id = ? WHERE subject_id = ?",
             (survivor_id, did),
         )
         conn.execute(
-            "UPDATE relations SET object_id = ? WHERE object_id = ?",
+            "UPDATE OR IGNORE relations SET object_id = ? WHERE object_id = ?",
             (survivor_id, did),
         )
 
-    # Deduplicate relations after rewrite
+    # Drop any relations still pointing at dropped entities (the OR IGNORE
+    # left them on the dropped id when a survivor duplicate already existed).
+    if drop_ids:
+        placeholders = ",".join("?" for _ in drop_ids)
+        conn.execute(
+            f"DELETE FROM relations WHERE subject_id IN ({placeholders}) OR object_id IN ({placeholders})",
+            list(drop_ids) + list(drop_ids),
+        )
+
+    # Deduplicate relations after rewrite (defensive — should be no-op after the above)
     conn.execute("""
         DELETE FROM relations WHERE id NOT IN (
             SELECT MIN(id) FROM relations
@@ -287,9 +305,13 @@ def _merge_entities(conn, survivor_id: int, drop_ids: list[int], canonical_name:
     for did in drop_ids:
         conn.execute("DELETE FROM entities WHERE id = ?", (did,))
 
-    # Now safe to update canonical name
+    # Now safe to update canonical name.
+    # Use OR IGNORE in case the new canonical_name already exists for another
+    # entity of the same type — leaves the survivor with its previous name in
+    # that edge case; schema induction (Stage 6) doesn't depend on perfect
+    # canonical resolution here.
     conn.execute(
-        "UPDATE entities SET canonical_name = ?, updated_at = ? WHERE id = ?",
+        "UPDATE OR IGNORE entities SET canonical_name = ?, updated_at = ? WHERE id = ?",
         (canonical_name, datetime.now(timezone.utc).isoformat(), survivor_id),
     )
 
