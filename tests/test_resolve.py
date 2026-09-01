@@ -198,3 +198,66 @@ def test_merge_entities_relation_unique_collision(initialized_corpus):
     assert survivor_rel == 1
 
     conn.close()
+
+
+def test_resolution_merge_count_excludes_skipped_cluster(initialized_corpus):
+    """The reported merge count must not include a cluster that was skipped.
+
+    The mentions list is read once at the start of the run, so a later cluster
+    can name a survivor_id an earlier cluster already deleted. _merge_entities
+    skips that cluster; the count run_resolution persists and returns has to
+    skip it too, or resolution_runs.merges overstates what happened.
+    """
+    from kgmd.config import load_config
+    from kgmd.db import get_connection
+
+    db_path = initialized_corpus / ".kgmd" / "graph.db"
+    conn = get_connection(db_path)
+    config = load_config(initialized_corpus)
+    config["resolution"]["llm_verify_clusters"] = False
+    now = datetime.now(timezone.utc).isoformat()
+
+    _seed_run_doc_chunk(conn, now)
+
+    # Three entities of the same type. Entity 2 carries two mentions, one
+    # matching entity 1 and one matching entity 3, so union-find produces two
+    # separate clusters: {1, 2} and {2, 3}.
+    conn.execute(SQL_INSERT_ENTITY, ("Brian Anderson", "Person", now, now))
+    conn.execute(SQL_INSERT_ENTITY, ("B. Anderson", "Person", now, now))
+    conn.execute(SQL_INSERT_ENTITY, ("Bri Anderson", "Person", now, now))
+
+    dim = 384
+    vec_a = [0.0] * dim
+    vec_a[0] = 1.0
+    vec_b = [0.0] * dim
+    vec_b[1] = 1.0  # orthogonal to vec_a -> cosine similarity 0
+
+    mentions = [
+        (1, "Brian Anderson", vec_a),
+        (2, "B. Anderson", vec_a),
+        (2, "B Anderson", vec_b),
+        (3, "Bri Anderson", vec_b),
+    ]
+    for mention_id, (entity_id, surface, vec) in enumerate(mentions, start=1):
+        conn.execute(SQL_INSERT_MENTION, (entity_id, surface))
+        conn.execute(
+            "INSERT INTO vec_entity_mentions (mention_id, embedding) VALUES (?, ?)",
+            (mention_id, struct.pack(f"{dim}f", *vec)),
+        )
+    conn.commit()
+
+    stats = run_resolution(conn, config)
+
+    # Only the first cluster merges: entity 2 folds into entity 1. The second
+    # cluster names survivor_id 2, which no longer exists, so it is skipped and
+    # entity 3 survives.
+    remaining = conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0]
+    assert remaining == 2
+    assert stats["merges"] == 1
+
+    persisted = conn.execute(
+        "SELECT merges FROM resolution_runs ORDER BY id DESC LIMIT 1"
+    ).fetchone()[0]
+    assert persisted == 1
+
+    conn.close()

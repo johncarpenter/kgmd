@@ -112,8 +112,7 @@ def run_resolution(conn, config: dict, corpus_dir: Path | None = None) -> dict:
                     conn, merge_ids
                 )
 
-                _merge_entities(conn, survivor_id, merge_ids[1:], canonical)
-                total_merges += len(merge_ids) - 1
+                total_merges += _merge_entities(conn, survivor_id, merge_ids[1:], canonical)
 
     _finalize_run(conn, run_id, total_merges)
     return {"merges": total_merges}
@@ -238,8 +237,12 @@ def _most_frequent_surface(conn, entity_ids: list[int]) -> str:
     return row["surface_form"] if row else ""
 
 
-def _merge_entities(conn, survivor_id: int, drop_ids: list[int], canonical_name: str) -> None:
-    """Merge dropped entities into the survivor."""
+def _merge_entities(conn, survivor_id: int, drop_ids: list[int], canonical_name: str) -> int:
+    """Merge dropped entities into the survivor.
+
+    Returns the number of entities actually merged away — 0 when the merge is
+    skipped because the survivor row is already gone.
+    """
     # The `mentions` list is fetched once at the start of run_resolution; later
     # clusters in the same run may name a survivor_id that an earlier cluster
     # already deleted. Skip silently in that case — the entity was already
@@ -248,7 +251,7 @@ def _merge_entities(conn, survivor_id: int, drop_ids: list[int], canonical_name:
         "SELECT attributes FROM entities WHERE id = ?", (survivor_id,)
     ).fetchone()
     if survivor_row is None:
-        return
+        return 0
     # Merge attributes before deleting drops
     survivor_attrs = json.loads(survivor_row["attributes"])
     for did in drop_ids:
@@ -317,6 +320,7 @@ def _merge_entities(conn, survivor_id: int, drop_ids: list[int], canonical_name:
     )
 
     conn.commit()
+    return len(drop_ids)
 
 
 def _finalize_run(conn, run_id: int, merges: int) -> None:
