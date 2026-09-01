@@ -240,8 +240,11 @@ def _most_frequent_surface(conn, entity_ids: list[int]) -> str:
 def _merge_entities(conn, survivor_id: int, drop_ids: list[int], canonical_name: str) -> int:
     """Merge dropped entities into the survivor.
 
-    Returns the number of entities actually merged away — 0 when the merge is
-    skipped because the survivor row is already gone.
+    Returns the number of entities actually merged away: 0 when the merge is
+    skipped because the survivor row is already gone, and otherwise only the
+    drop_ids that still had a row to merge. Both cases arise because the
+    mentions list is read once per run, so overlapping clusters can name a
+    survivor or a drop that an earlier cluster already deleted.
     """
     # The `mentions` list is fetched once at the start of run_resolution; later
     # clusters in the same run may name a survivor_id that an earlier cluster
@@ -254,11 +257,13 @@ def _merge_entities(conn, survivor_id: int, drop_ids: list[int], canonical_name:
         return 0
     # Merge attributes before deleting drops
     survivor_attrs = json.loads(survivor_row["attributes"])
+    merged = 0
     for did in drop_ids:
         row = conn.execute("SELECT attributes FROM entities WHERE id = ?", (did,)).fetchone()
         if row:
             other = json.loads(row["attributes"])
             survivor_attrs.update(other)
+            merged += 1
 
     conn.execute(
         "UPDATE entities SET attributes = ? WHERE id = ?",
@@ -320,7 +325,7 @@ def _merge_entities(conn, survivor_id: int, drop_ids: list[int], canonical_name:
     )
 
     conn.commit()
-    return len(drop_ids)
+    return merged
 
 
 def _finalize_run(conn, run_id: int, merges: int) -> None:

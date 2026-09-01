@@ -261,3 +261,57 @@ def test_resolution_merge_count_excludes_skipped_cluster(initialized_corpus):
     assert persisted == 1
 
     conn.close()
+
+
+def test_resolution_merge_count_excludes_already_deleted_drop(initialized_corpus):
+    """A drop entity an earlier cluster already deleted must not be counted.
+
+    The mirror of the stale-survivor case: here the survivor is still present,
+    so the merge runs, but one of its drop_ids was deleted by an earlier
+    cluster. Re-pointing and deleting that id are no-ops, so it must not be
+    counted as a merge.
+    """
+    from kgmd.config import load_config
+    from kgmd.db import get_connection
+
+    db_path = initialized_corpus / ".kgmd" / "graph.db"
+    conn = get_connection(db_path)
+    config = load_config(initialized_corpus)
+    config["resolution"]["llm_verify_clusters"] = False
+    now = datetime.now(timezone.utc).isoformat()
+
+    _seed_run_doc_chunk(conn, now)
+
+    # Entity 3 is shared between two clusters: {2, 3} and {1, 3}. The first
+    # deletes entity 3 as a drop; the second still names it as a drop under a
+    # survivor (entity 1) that is very much alive.
+    conn.execute(SQL_INSERT_ENTITY, ("Brian Anderson", "Person", now, now))
+    conn.execute(SQL_INSERT_ENTITY, ("Bri Anderson", "Person", now, now))
+    conn.execute(SQL_INSERT_ENTITY, ("B. Anderson", "Person", now, now))
+
+    dim = 384
+    vec_a = [0.0] * dim
+    vec_a[0] = 1.0
+    vec_b = [0.0] * dim
+    vec_b[1] = 1.0
+
+    mentions = [
+        (2, "Bri Anderson", vec_a),
+        (3, "B. Anderson", vec_a),
+        (3, "B Anderson", vec_b),
+        (1, "Brian Anderson", vec_b),
+    ]
+    for mention_id, (entity_id, surface, vec) in enumerate(mentions, start=1):
+        conn.execute(SQL_INSERT_MENTION, (entity_id, surface))
+        conn.execute(
+            "INSERT INTO vec_entity_mentions (mention_id, embedding) VALUES (?, ?)",
+            (mention_id, struct.pack(f"{dim}f", *vec)),
+        )
+    conn.commit()
+
+    stats = run_resolution(conn, config)
+
+    remaining = conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0]
+    assert stats["merges"] == 3 - remaining
+
+    conn.close()
